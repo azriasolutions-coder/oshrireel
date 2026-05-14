@@ -2,11 +2,7 @@ services:
   - type: web
     name: oshrireel
     runtime: docker
-    plan: starter
+    plan: free
     dockerfilePath: ./Dockerfile
     healthCheckPath: /
     autoDeploy: true
-    disk:
-      name: oshrireel-data
-      mountPath: /app/output
-      sizeGB: 5
