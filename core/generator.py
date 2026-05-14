@@ -382,11 +382,8 @@ def generate(
     cmd += [
         "-c:v", "libx264",
         "-pix_fmt", "yuv420p",
-        # ultrafast preset uses far less RAM and CPU than medium, at a small
-        # filesize penalty — essential on memory-constrained free hosting.
-        "-preset", "ultrafast",
-        "-crf", "23",
-        "-threads", "2",
+        "-preset", "medium",
+        "-crf", "20",
         "-r", str(FPS),
         "-t", f"{duration:.3f}",
         "-movflags", "+faststart",
