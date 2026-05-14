@@ -5,6 +5,31 @@ import uuid
 from pathlib import Path
 
 from flask import Flask, jsonify, request, render_template, send_file
+from PIL import Image
+
+# Memory cap on free-tier hosts — anything bigger than this on the longest
+# side gets resized before ffmpeg sees it. 1280px is plenty for 480×848 or
+# 720×1280 output and dramatically cuts ffmpeg RAM use.
+MAX_IMAGE_DIM = 1280
+
+
+def preshrink_image(path: Path) -> None:
+    """Resize an uploaded image in place if it's larger than MAX_IMAGE_DIM."""
+    try:
+        with Image.open(path) as im:
+            im.load()
+            longest = max(im.size)
+            if longest <= MAX_IMAGE_DIM:
+                return
+            im.thumbnail((MAX_IMAGE_DIM, MAX_IMAGE_DIM), Image.LANCZOS)
+            save_kwargs = {"quality": 88, "optimize": True}
+            # Pillow doesn't accept `optimize` for some formats — guard it.
+            try:
+                im.save(path, **save_kwargs)
+            except Exception:
+                im.save(path)
+    except Exception:
+        pass  # if anything fails, fall back to the original file
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(PROJECT_ROOT))
@@ -35,7 +60,7 @@ app = Flask(
     static_folder=str(PROJECT_ROOT / "web" / "static"),
     template_folder=str(PROJECT_ROOT / "web" / "templates"),
 )
-app.config["MAX_CONTENT_LENGTH"] = 512 * 1024 * 1024
+app.config["MAX_CONTENT_LENGTH"] = 80 * 1024 * 1024  # 80MB total per request — free-tier safe
 
 
 @app.get("/")
@@ -112,6 +137,9 @@ def api_generate():
             continue
         target = job_dir / f"{idx:04d}{suffix}"
         f.save(target)
+        # Pre-shrink stills (videos are decoded frame-by-frame by ffmpeg anyway).
+        if suffix in {".jpg", ".jpeg", ".png", ".webp", ".bmp"}:
+            preshrink_image(target)
         image_paths.append(target)
 
     if not image_paths:
@@ -130,6 +158,8 @@ def api_generate():
         if suffix in MEDIA_EXTS:
             bg_path = job_dir / f"bg{suffix}"
             bg_file.save(bg_path)
+            if suffix in {".jpg", ".jpeg", ".png", ".webp", ".bmp"}:
+                preshrink_image(bg_path)
 
     OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
     output_name = f"video_{int(time.time())}_{job_id}.mp4"
