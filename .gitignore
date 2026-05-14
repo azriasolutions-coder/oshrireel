@@ -1,0 +1,36 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+.venv/
+venv/
+*.egg-info/
+
+# Runtime data
+output/
+workdir/
+.port
+
+# IDE / editor
+.idea/
+.vscode/
+*.swp
+.DS_Store
+Thumbs.db
+
+# Big binary assets (keep the codebase lean; users supply their own)
+*.mp4
+*.mov
+*.webm
+*.mp3
+*.m4a
+*.wav
+analysis/test_imgs/
+analysis/test_mixed/
+analysis/transitions/
+analysis/timeline_grid.jpg
+analysis/scene_times.txt
+
+# OS
+ehthumbs.db
+Desktop.ini

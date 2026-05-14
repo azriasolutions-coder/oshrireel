@@ -1,0 +1,143 @@
+<!doctype html>
+<html lang="he" dir="rtl">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>אוֹשרי-Reel · סטודיו לסרטוני סיכום שבועי</title>
+  <meta name="description" content="OshriReel — סטודיו אוטומטי ליצירת סרטוני סיכום שבועי וזמני שבת לרב אושרי אביכזר ולקהילת ש״ס באר שבע." />
+  <link rel="icon" type="image/svg+xml" href="/static/favicon.svg" />
+  <link rel="apple-touch-icon" href="/static/favicon.svg" />
+  <meta name="theme-color" content="#08152e" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Frank+Ruhl+Libre:wght@400;500;700;900&family=Heebo:wght@300;400;500;700;900&family=Assistant:wght@400;700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="/static/style.css" />
+</head>
+<body>
+  <div class="bg-stars" aria-hidden="true"></div>
+  <main>
+    <header class="hero">
+      <div class="hero-banner">
+        <span class="hero-ornament">✦</span>
+        <h1 class="hero-title">אוֹשְׁרי&#8202;-&#8202;Reel</h1>
+        <span class="hero-ornament">✦</span>
+      </div>
+      <p class="hero-sub">סטודיו לסרטוני סיכום שבועי וזמני שבת — בלחיצת כפתור</p>
+    </header>
+
+    <section id="drop" class="card drop-zone">
+      <div class="drop-inner">
+        <strong>גרור לכאן תמונות או קליפים</strong>
+        <span>או</span>
+        <label class="btn"><input type="file" id="file-input" accept="image/*,video/*" multiple hidden /> בחר קבצים</label>
+      </div>
+    </section>
+
+    <section id="thumbs" class="card" hidden>
+      <div class="row between">
+        <h2>סדר הסצנות</h2>
+        <div class="row gap">
+          <button id="shuffle" class="btn small">🎲 ערבב לפי הצמדות</button>
+          <button id="clear" class="btn ghost small">נקה הכל</button>
+        </div>
+      </div>
+      <p class="hint">גרור לסידור ידני, או הצמד תמונות (📌) למיקומים קבועים — והשאר יתפזר אקראית.</p>
+      <ul id="thumb-list" class="thumb-list"></ul>
+    </section>
+
+    <section class="card settings">
+      <h2>הגדרות</h2>
+      <div class="grid">
+        <label>
+          <span>שיר רקע</span>
+          <div class="row gap">
+            <select id="music"></select>
+            <label class="btn ghost small">
+              <input type="file" id="music-upload" accept="audio/*" hidden /> העלה
+            </label>
+          </div>
+        </label>
+        <label>
+          <span>שניות לכל תמונה</span>
+          <input type="number" id="hold" value="2.5" min="1" max="10" step="0.1" />
+        </label>
+        <label>
+          <span>אורך מעבר (שניות)</span>
+          <input type="number" id="xfade" value="0.4" min="0" max="2" step="0.05" />
+        </label>
+      </div>
+
+      <div class="grid grid-2" style="margin-top:14px;">
+        <label>
+          <span>📐 גודל סרטון (aspect ratio)</span>
+          <select id="aspect">
+            <option value="9:16">9:16 — Reels / סטטוס (480×848)</option>
+            <option value="9:16-hd">9:16 HD (720×1280)</option>
+            <option value="1:1">1:1 — ריבועי לאינסטגרם (720×720)</option>
+            <option value="4:5">4:5 — אינסטגרם פיד (864×1080)</option>
+            <option value="3:4">3:4 — פורטרט קלאסי (480×640)</option>
+            <option value="16:9">16:9 — יוטיוב נוף (1280×720)</option>
+            <option value="16:9-hd">16:9 Full HD (1920×1080)</option>
+          </select>
+        </label>
+        <label>
+          <span>סגנון מעברים (ברירת מחדל לכל הסרטון)</span>
+          <select id="transition"></select>
+        </label>
+        <label style="grid-column: 1 / -1;">
+          <span>🎬 פילטר קולנועי (look)</span>
+          <select id="look">
+            <option value="none">ללא — מקור נקי, ללא עיבוד</option>
+            <option value="cinematic">סינמטי — קונטרסט גבוה + vignette</option>
+            <option value="warm">חמים — גוון זהוב, מזמין</option>
+            <option value="cool">קריר — גוון כחלחל</option>
+            <option value="vintage">וינטג' — צבעים דהויים + גרעין סרט</option>
+            <option value="sepia">ספיה — חום־זהבהב נוסטלגי</option>
+            <option value="vivid">חי וצבעוני — צבעים רוויים</option>
+            <option value="noir">נואר — שחור־לבן דרמטי</option>
+            <option value="sparkle">רך ונוצץ — בהירות + טשטוש עדין</option>
+          </select>
+        </label>
+      </div>
+      <p class="hint">לחץ על תמונה כדי לבחור אפקט מעבר שונה ספציפי לאחריה. ה-look משפיע על כל הסצנות יחד.</p>
+
+      <div class="grid" style="margin-top:14px;">
+        <label style="grid-column: 1 / -1;">
+          <span>רקע מאחורה (תמונה / וידאו · אופציונלי)</span>
+          <div class="row gap">
+            <label class="btn small">
+              <input type="file" id="bg-upload" accept="image/*,video/*" hidden /> בחר רקע
+            </label>
+            <span id="bg-name" class="hint" style="margin:0;"></span>
+            <button id="bg-clear" class="btn ghost small" hidden>הסר</button>
+          </div>
+        </label>
+      </div>
+      <p class="hint" id="duration-hint"></p>
+    </section>
+
+    <section class="card actions">
+      <button id="generate" class="btn primary big" disabled>✦ צור סרטון ✦</button>
+      <div id="status" class="status"></div>
+    </section>
+
+    <section id="result" class="card" hidden>
+      <h2>הסרטון מוכן</h2>
+      <video id="video" controls playsinline></video>
+      <a id="download" class="btn primary" download>הורד MP4</a>
+    </section>
+
+    <footer class="brand-footer">
+      <div class="brand-divider"></div>
+      <div class="brand-content">
+        <span class="brand-by">מבית</span>
+        <a class="brand-name" href="https://azriasolutions.com" target="_blank" rel="noopener">AzriaSolutions</a>
+        <span class="brand-sep">·</span>
+        <a class="brand-tel" href="tel:+972545660226">054-566-0226</a>
+      </div>
+    </footer>
+  </main>
+
+  <script src="/static/app.js"></script>
+</body>
+</html>

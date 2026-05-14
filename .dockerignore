@@ -1,0 +1,14 @@
+analysis/
+output/
+workdir/
+*.mp4
+*.jpg
+*.jpeg
+*.png
+*.webm
+__pycache__/
+*.pyc
+.venv/
+.git/
+.idea/
+.vscode/
