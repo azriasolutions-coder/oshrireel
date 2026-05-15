@@ -6,8 +6,10 @@ from core.generator import (
     ALL_TRANSITIONS,
     ASPECT_PRESETS,
     DEFAULT_ASPECT,
+    DEFAULT_MOTION,
     SCENE_DURATION,
     SCENE_LOOKS,
+    SCENE_MOTIONS,
     TRANSITION_DURATION,
     check_ffmpeg,
     generate,
@@ -97,6 +99,16 @@ def main(argv: list[str] | None = None) -> int:
         choices=list(ASPECT_PRESETS.keys()),
         help=f"Output aspect ratio / resolution preset (default {DEFAULT_ASPECT}).",
     )
+    parser.add_argument(
+        "--motion",
+        type=str,
+        default=DEFAULT_MOTION,
+        choices=list(SCENE_MOTIONS),
+        help=(
+            "Per-scene motion effect (zoompan-based). Options: "
+            + ", ".join(SCENE_MOTIONS) + f" (default {DEFAULT_MOTION})."
+        ),
+    )
     args = parser.parse_args(argv)
 
     if args.list_transitions:
@@ -131,6 +143,7 @@ def main(argv: list[str] | None = None) -> int:
         background=args.background,
         look=args.look,
         aspect=args.aspect,
+        motion=args.motion,
     )
     if transitions_used:
         print("Transitions: " + ", ".join(transitions_used))

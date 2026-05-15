@@ -30,9 +30,11 @@ from core.generator import (  # noqa: E402
     AUDIO_EXTS,
     AUTO_MIX_TRANSITIONS,
     DEFAULT_ASPECT,
+    DEFAULT_MOTION,
     MEDIA_EXTS,
     SCENE_DURATION,
     SCENE_LOOKS,
+    SCENE_MOTIONS,
     TRANSITION_DURATION,
     check_ffmpeg,
     generate,
@@ -115,6 +117,10 @@ def api_generate():
     if aspect_spec not in ASPECT_PRESETS:
         aspect_spec = DEFAULT_ASPECT
 
+    motion_spec = (request.form.get("motion") or DEFAULT_MOTION).strip()
+    if motion_spec not in SCENE_MOTIONS:
+        motion_spec = DEFAULT_MOTION
+
     bg_file = request.files.get("background")
 
     job_id = uuid.uuid4().hex[:10]
@@ -176,6 +182,7 @@ def api_generate():
             background=bg_path,
             look=look_spec,
             aspect=aspect_spec,
+            motion=motion_spec,
         )
     except Exception as e:
         return jsonify({"error": str(e)}), 500

@@ -50,6 +50,63 @@ SCENE_LOOKS: dict[str, str] = {
 }
 DEFAULT_LOOK = "none"
 
+# Scene-level motion effects — applied per scene before the closing trim.
+SCENE_MOTIONS: tuple[str, ...] = (
+    "none",
+    "zoomin",
+    "zoomout",
+    "panleft",
+    "panright",
+    "panup",
+    "pandown",
+    "kenburns",
+    "flash",
+    "random",
+)
+DEFAULT_MOTION = "none"
+# Curated pool for `random` — keeps each scene visually distinct.
+_RANDOM_MOTION_POOL: tuple[str, ...] = (
+    "zoomin", "zoomout", "kenburns", "panleft", "panright", "flash",
+)
+
+
+def motion_filter_chain(motion: str, hold: float, width: int, height: int) -> str:
+    """Build an ffmpeg filter chain implementing the chosen scene motion.
+    Returns an empty string when no motion is requested.
+    """
+    name = (motion or "none").strip().lower()
+    if name == "random":
+        name = random.choice(_RANDOM_MOTION_POOL)
+    if name in ("", "none"):
+        return ""
+    total = max(1, int(hold * FPS))
+    zp = f"d=1:s={width}x{height}:fps={FPS}"
+    if name == "zoomin":
+        return f"zoompan=z='1+0.18*on/{total}':{zp}"
+    if name == "zoomout":
+        return f"zoompan=z='1.18-0.18*on/{total}':{zp}"
+    if name == "panleft":
+        return (f"zoompan=z='1.10':x='(1-on/{total})*(iw-iw/zoom)':"
+                f"y='(ih-ih/zoom)/2':{zp}")
+    if name == "panright":
+        return (f"zoompan=z='1.10':x='(on/{total})*(iw-iw/zoom)':"
+                f"y='(ih-ih/zoom)/2':{zp}")
+    if name == "panup":
+        return (f"zoompan=z='1.10':x='(iw-iw/zoom)/2':"
+                f"y='(1-on/{total})*(ih-ih/zoom)':{zp}")
+    if name == "pandown":
+        return (f"zoompan=z='1.10':x='(iw-iw/zoom)/2':"
+                f"y='(on/{total})*(ih-ih/zoom)':{zp}")
+    if name == "kenburns":
+        return (f"zoompan=z='1+0.12*on/{total}':"
+                f"x='(iw-iw/zoom)*0.3*on/{total}':"
+                f"y='(ih-ih/zoom)*0.3*on/{total}':{zp}")
+    if name == "flash":
+        # Brief white pulse near mid-scene (~80ms)
+        c = hold / 2
+        return f"eq=brightness='if(between(t,{c:.3f},{c+0.08:.3f}),0.7,0)'"
+    return ""
+
 
 def is_video(path: Path) -> bool:
     return path.suffix.lower() in VIDEO_EXTS
@@ -109,6 +166,7 @@ def per_image_filter(
     look: str = DEFAULT_LOOK,
     width: int = WIDTH,
     height: int = HEIGHT,
+    motion: str = DEFAULT_MOTION,
 ) -> str:
     """Per-scene branch: backdrop + fitted foreground.
 
@@ -139,6 +197,8 @@ def per_image_filter(
         )
     look_chain = SCENE_LOOKS.get(look or "none", "")
     look_step = f"{look_chain}," if look_chain else ""
+    motion_chain = motion_filter_chain(motion, hold, width, height)
+    motion_step = f"{motion_chain}," if motion_chain else ""
     return (
         f"{bg_branch}"
         f"[{idx}:v]"
@@ -153,6 +213,7 @@ def per_image_filter(
         f"[bg{idx}][fg{idx}]overlay=(W-w)/2:(H-h)/2:format=auto,"
         f"format=yuv420p,"
         f"{look_step}"
+        f"{motion_step}"
         f"trim=duration={hold},setpts=PTS-STARTPTS,fps={FPS}"
         f"[v{idx}]"
     )
@@ -234,6 +295,7 @@ def build_filtergraph(
     look: str = DEFAULT_LOOK,
     width: int = WIDTH,
     height: int = HEIGHT,
+    motion: str = DEFAULT_MOTION,
 ) -> tuple[str, str]:
     """Build the full filter graph and return (graph, final_label).
 
@@ -265,7 +327,7 @@ def build_filtergraph(
             bg_labels[i] = f"bgchunk{i}"
 
     for i in range(n_images):
-        parts.append(per_image_filter(i, hold, flags[i], bg_labels[i], look, width, height))
+        parts.append(per_image_filter(i, hold, flags[i], bg_labels[i], look, width, height, motion))
 
     if n_images == 1:
         return ";".join(parts), "v0"
@@ -318,6 +380,7 @@ def generate(
     background: Path | None = None,
     look: str = DEFAULT_LOOK,
     aspect: str | None = DEFAULT_ASPECT,
+    motion: str = DEFAULT_MOTION,
 ) -> tuple[Path, list[str]]:
     """Render the video. Returns (output_path, transitions_used_per_gap)."""
     image_list = [Path(p) for p in images]
@@ -342,7 +405,7 @@ def generate(
     bg_input_idx = n if bg_path is not None else None
 
     width, height = resolve_aspect(aspect)
-    graph, final = build_filtergraph(n, hold, xfade, transitions, clip_flags, bg_input_idx, look, width, height)
+    graph, final = build_filtergraph(n, hold, xfade, transitions, clip_flags, bg_input_idx, look, width, height, motion)
 
     if fade_out > 0:
         graph += f";[{final}]fade=t=out:st={max(0, duration - fade_out):.3f}:d={fade_out}[vout]"

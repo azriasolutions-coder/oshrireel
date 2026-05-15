@@ -10,6 +10,7 @@ const xfadeInput = document.getElementById("xfade");
 const transitionSelect = document.getElementById("transition");
 const lookSelect = document.getElementById("look");
 const aspectSelect = document.getElementById("aspect");
+const motionSelect = document.getElementById("motion");
 const durationHint = document.getElementById("duration-hint");
 const generateBtn = document.getElementById("generate");
 const shuffleBtn = document.getElementById("shuffle");
@@ -435,6 +436,7 @@ generateBtn.addEventListener("click", async () => {
   fd.append("transition", transitionSelect.value || "auto");
   fd.append("look", (lookSelect && lookSelect.value) || "none");
   fd.append("aspect", (aspectSelect && aspectSelect.value) || "9:16");
+  fd.append("motion", (motionSelect && motionSelect.value) || "none");
   // Per-image overrides — one entry per gap (items.length - 1).
   const overrides = items.slice(0, -1).map((it) => it.transitionOverride || "");
   if (overrides.some((v) => v)) {
