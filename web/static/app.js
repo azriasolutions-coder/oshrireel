@@ -27,12 +27,12 @@ let watermarkFile = null;
 const TEMPLATES = {
   reference: { aspect: "9:16",    hold: 2.4, xfade: 0.35,
                transition: "cut,cut,cut,fade,slideleft,cut,fade,cut,slideleft,cut",
-               look: "warm",      motion: "kenburns", speed: 1 },
-  shabbat:   { aspect: "9:16",    hold: 2.8, xfade: 0.5, transition: "auto",   look: "warm",      motion: "kenburns", speed: 1 },
-  festive:   { aspect: "9:16",    hold: 2.3, xfade: 0.4, transition: "auto",   look: "vivid",     motion: "random",   speed: 1 },
+               look: "warm",      motion: "subtle", speed: 1 },
+  shabbat:   { aspect: "9:16",    hold: 2.8, xfade: 0.5, transition: "auto",   look: "warm",      motion: "subtle",   speed: 1 },
+  festive:   { aspect: "9:16",    hold: 2.3, xfade: 0.4, transition: "auto",   look: "vivid",     motion: "subtle",   speed: 1 },
   lesson:    { aspect: "9:16",    hold: 3.2, xfade: 0.6, transition: "fade",   look: "warm",      motion: "kenburns", speed: 1 },
-  news:      { aspect: "9:16",    hold: 2.0, xfade: 0.3, transition: "auto",   look: "cinematic", motion: "zoomin",   speed: 1 },
-  promo:     { aspect: "9:16",    hold: 1.8, xfade: 0.3, transition: "auto",   look: "vivid",     motion: "random",   speed: 1 },
+  news:      { aspect: "9:16",    hold: 2.0, xfade: 0.3, transition: "auto",   look: "cinematic", motion: "subtle",   speed: 1 },
+  promo:     { aspect: "9:16",    hold: 1.8, xfade: 0.3, transition: "auto",   look: "vivid",     motion: "subtle",   speed: 1 },
   dramatic:  { aspect: "9:16-hd", hold: 1.6, xfade: 0.25, transition: "cycle", look: "noir",      motion: "random",   speed: 1 },
 };
 
@@ -69,6 +69,7 @@ let items = [];
 const MOTION_OPTIONS = [
   ["",          "🎥 ברירת מחדל"],
   ["none",      "ללא תנועה"],
+  ["subtle",    "🕊️ עדין (זום/פאן, ללא רעידות)"],
   ["zoomin",    "🔍 זום-אין"],
   ["zoomout",   "🔭 זום-אאוט"],
   ["kenburns",  "🎬 קן-ברנס"],
@@ -80,7 +81,7 @@ const MOTION_OPTIONS = [
   ["shake",     "📳 רעידה"],
   ["pulse",     "💓 פעימת בהירות"],
   ["punch",     "💥 זום-פאנץ'"],
-  ["random",    "🎲 אקראי"],
+  ["random",    "🎲 אקראי (כולל אגרסיביים)"],
 ];
 
 function buildMotionOptions(selected) {

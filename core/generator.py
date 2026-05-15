@@ -94,10 +94,11 @@ SCENE_MOTIONS: tuple[str, ...] = (
     "shake",
     "pulse",
     "punch",
+    "subtle",
     "random",
 )
 DEFAULT_MOTION = "none"
-# Curated pool for `random` — favors the punchiest, most visible motions.
+# Aggressive pool — for `random`. Includes punchy, attention-grabbing effects.
 _RANDOM_MOTION_POOL: tuple[str, ...] = (
     "zoomin", "zoomin",       # weighted: 2× — most expected
     "zoomout", "zoomout",
@@ -108,6 +109,16 @@ _RANDOM_MOTION_POOL: tuple[str, ...] = (
     "pulse",
     "punch",
 )
+# Subtle pool — for `subtle`. Documentary-style motion: zooms, pans, ken-burns.
+# Explicitly excludes shake / pulse / punch / flash so respectful content
+# (religious, news, lessons) doesn't get jarring effects.
+_SUBTLE_MOTION_POOL: tuple[str, ...] = (
+    "kenburns", "kenburns", "kenburns",   # 3× — main documentary feel
+    "zoomin", "zoomin",
+    "zoomout", "zoomout",
+    "panleft", "panright",
+    "panup", "pandown",
+)
 
 
 def motion_filter_chain(motion: str, hold: float, width: int, height: int) -> str:
@@ -117,6 +128,8 @@ def motion_filter_chain(motion: str, hold: float, width: int, height: int) -> st
     name = (motion or "none").strip().lower()
     if name == "random":
         name = random.choice(_RANDOM_MOTION_POOL)
+    elif name == "subtle":
+        name = random.choice(_SUBTLE_MOTION_POOL)
     if name in ("", "none"):
         return ""
     total = max(1, int(hold * FPS))
