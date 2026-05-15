@@ -629,29 +629,66 @@ generateBtn.addEventListener("click", async () => {
   }
 
   try {
-    statusEl.textContent = "מעלה לשרת ומייצר סרטון…";
+    statusEl.textContent = "מעלה לשרת…";
     const r = await fetch("/api/generate", { method: "POST", body: fd });
-    let data = null;
+    let submit = null;
     const raw = await r.text();
-    try { data = JSON.parse(raw); } catch (_) {
+    try { submit = JSON.parse(raw); } catch (_) {
       throw new Error(
-        r.status === 502 || r.status === 504
-          ? `השרת קרס באמצע הייצור (HTTP ${r.status}). סיבה סבירה: התמונות גדולות מדי או יותר מדי תמונות בבת אחת. נסה עם פחות תמונות או תמונות קטנות יותר.`
-          : r.status === 413
-          ? "הקבצים גדולים מדי בסך הכל (הגבול 300MB). הקטן או חלק לכמה ריצות."
+        r.status === 413
+          ? "הקבצים גדולים מדי (הגבול 300MB). הקטן או חלק לכמה ריצות."
           : `שגיאה ${r.status} מהשרת — ${raw.slice(0, 200)}`
       );
     }
-    if (!r.ok || !data.ok) throw new Error(data.error || `שגיאה ${r.status}`);
-    const tsummary = (data.transitions && data.transitions.length)
-      ? " · מעברים: " + data.transitions.map(transitionLabel).join(" → ")
-      : "";
-    statusEl.textContent = `הסתיים: ${data.images} תמונות${tsummary}`;
-    videoEl.src = data.url + "?t=" + Date.now();
-    downloadLink.href = data.url;
-    downloadLink.setAttribute("download", data.video);
-    resultCard.hidden = false;
-    resultCard.scrollIntoView({ behavior: "smooth", block: "start" });
+    if (!r.ok || !submit.ok || !submit.job_id) {
+      throw new Error(submit.error || `שגיאה ${r.status}`);
+    }
+    const jobId = submit.job_id;
+    statusEl.textContent = `ההזמנה נשלחה (${jobId.slice(0, 6)})…`;
+
+    // Poll every 3 seconds for status updates.
+    let consecutiveErrors = 0;
+    while (true) {
+      await new Promise((res) => setTimeout(res, 3000));
+      let sr, s;
+      try {
+        sr = await fetch(`/api/job/${encodeURIComponent(jobId)}`);
+        s = await sr.json();
+      } catch (_) {
+        consecutiveErrors++;
+        if (consecutiveErrors >= 6) {
+          throw new Error("אין תקשורת עם השרת. נסה לרענן ולבדוק את הסטטוס.");
+        }
+        statusEl.textContent = "בדיקת סטטוס נכשלה — מנסה שוב…";
+        continue;
+      }
+      consecutiveErrors = 0;
+      if (!s.ok) throw new Error(s.error || "סטטוס לא ידוע");
+
+      if (s.status === "queued") {
+        statusEl.textContent = `בתור — מקום ${s.queue_position || "?"} · ${s.images || 0} תמונות`;
+      } else if (s.status === "rendering") {
+        const sec = s.started_at ? Math.round((Date.now() / 1000) - s.started_at) : 0;
+        statusEl.textContent = `מייצר… ${sec} שניות עברו`;
+      } else if (s.status === "done") {
+        const tsummary = (s.transitions && s.transitions.length)
+          ? " · " + s.transitions.map(transitionLabel).join(" → ")
+          : "";
+        const took = (s.finished_at && s.started_at)
+          ? ` (${Math.round(s.finished_at - s.started_at)}s)` : "";
+        statusEl.textContent = `הסתיים ✓${took}${tsummary}`;
+        videoEl.src = s.video_url + "?t=" + Date.now();
+        downloadLink.href = s.video_url;
+        downloadLink.setAttribute("download", s.video_filename || "video.mp4");
+        resultCard.hidden = false;
+        resultCard.scrollIntoView({ behavior: "smooth", block: "start" });
+        break;
+      } else if (s.status === "failed") {
+        throw new Error("הייצור נכשל: " + (s.error || "סיבה לא ידועה"));
+      } else {
+        statusEl.textContent = "סטטוס: " + s.status;
+      }
+    }
   } catch (err) {
     statusEl.textContent = "נכשל: " + err.message;
     statusEl.classList.add("error");

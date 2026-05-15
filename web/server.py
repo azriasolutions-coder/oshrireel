@@ -1,5 +1,7 @@
+import queue
 import shutil
 import sys
+import threading
 import time
 import uuid
 from pathlib import Path
@@ -9,6 +11,88 @@ from flask import Flask, jsonify, request, render_template, send_file
 # How long a rendered video may live on disk before being purged.
 # The user previews + downloads it; after that we don't keep it around.
 OUTPUT_TTL_SECONDS = 600  # 10 minutes
+# How long a finished job's metadata stays in the JOBS dict for status polling.
+JOB_TTL_SECONDS = 1800  # 30 minutes
+
+# ---- Render queue + jobs registry --------------------------------------------
+# A single worker drains this queue, so only one ffmpeg pipeline runs at a time
+# regardless of how many users press "Generate". This prevents the concurrent
+# OOM that happens when several ffmpeg processes each try to grab 4–8GB on an
+# 8GB cgroup.
+RENDER_QUEUE: "queue.Queue" = queue.Queue()
+JOBS: dict[str, dict] = {}
+JOBS_LOCK = threading.Lock()
+
+
+def _refresh_queue_positions() -> None:
+    """Renumber 1-based queue positions for jobs still in `queued` state.
+    Caller must hold JOBS_LOCK."""
+    pending = [
+        (jid, j) for jid, j in JOBS.items()
+        if j.get("status") == "queued"
+    ]
+    pending.sort(key=lambda kv: kv[1].get("created_at", 0))
+    for i, (_jid, j) in enumerate(pending):
+        j["queue_position"] = i + 1
+
+
+def _purge_stale_jobs() -> None:
+    """Drop finished jobs whose result has expired."""
+    now = time.time()
+    with JOBS_LOCK:
+        for jid in list(JOBS.keys()):
+            j = JOBS[jid]
+            done_at = j.get("finished_at") or 0
+            if j.get("status") in ("done", "failed") and done_at and now - done_at > JOB_TTL_SECONDS:
+                JOBS.pop(jid, None)
+
+
+def _render_worker() -> None:
+    """Background thread: pulls jobs and renders them serially."""
+    while True:
+        item = RENDER_QUEUE.get()
+        if item is None:
+            RENDER_QUEUE.task_done()
+            continue
+        job_id, params = item
+        with JOBS_LOCK:
+            if job_id in JOBS:
+                JOBS[job_id]["status"] = "rendering"
+                JOBS[job_id]["started_at"] = time.time()
+                JOBS[job_id].pop("queue_position", None)
+        job_dir = params.pop("_job_dir", None)
+        try:
+            output_path = params["output"]
+            _, transitions_used = generate(**params)
+            with JOBS_LOCK:
+                if job_id in JOBS:
+                    JOBS[job_id].update({
+                        "status": "done",
+                        "video_filename": output_path.name,
+                        "video_url": f"/api/video/{output_path.name}",
+                        "transitions": transitions_used,
+                        "finished_at": time.time(),
+                    })
+        except Exception as e:
+            with JOBS_LOCK:
+                if job_id in JOBS:
+                    JOBS[job_id].update({
+                        "status": "failed",
+                        "error": str(e)[:500],
+                        "finished_at": time.time(),
+                    })
+        finally:
+            if job_dir is not None:
+                shutil.rmtree(job_dir, ignore_errors=True)
+            RENDER_QUEUE.task_done()
+            with JOBS_LOCK:
+                _refresh_queue_positions()
+            _purge_stale_jobs()
+
+
+# Launch a single worker thread on import. With gunicorn --workers 1 --threads 2
+# this is the one worker per process.
+threading.Thread(target=_render_worker, daemon=True, name="render-worker").start()
 
 
 def purge_stale_outputs(output_dir: Path, ttl: int = OUTPUT_TTL_SECONDS) -> None:
@@ -211,35 +295,43 @@ def api_generate():
     else:
         motion_arg = motion_spec
 
-    try:
-        _, transitions_used = generate(
-            images=image_paths,
-            output=output_path,
-            music=music_path,
-            hold=hold,
-            xfade=xfade,
-            transition=transition_arg,
-            background=bg_path,
-            look=look_spec,
-            aspect=aspect_spec,
-            motion=motion_arg,
-            texts=texts_list,
-            speed=speed_val,
-            watermark=wm_path,
-            watermark_pos=watermark_pos,
-        )
-    except Exception as e:
-        return jsonify({"error": str(e)}), 500
-    finally:
-        shutil.rmtree(job_dir, ignore_errors=True)
+    # Enqueue — actual ffmpeg work runs serially in the background worker.
+    params = {
+        "images": image_paths,
+        "output": output_path,
+        "music": music_path,
+        "hold": hold,
+        "xfade": xfade,
+        "transition": transition_arg,
+        "background": bg_path,
+        "look": look_spec,
+        "aspect": aspect_spec,
+        "motion": motion_arg,
+        "texts": texts_list,
+        "speed": speed_val,
+        "watermark": wm_path,
+        "watermark_pos": watermark_pos,
+        "_job_dir": job_dir,  # not a generate() kwarg — worker uses it for cleanup
+    }
+    new_job_id = uuid.uuid4().hex[:12]
+    with JOBS_LOCK:
+        JOBS[new_job_id] = {
+            "status": "queued",
+            "queue_position": RENDER_QUEUE.qsize() + 1,
+            "created_at": time.time(),
+            "images": len(image_paths),
+        }
+    RENDER_QUEUE.put((new_job_id, params))
+    return jsonify({"ok": True, "job_id": new_job_id})
 
-    return jsonify({
-        "ok": True,
-        "video": output_name,
-        "url": f"/api/video/{output_name}",
-        "images": len(image_paths),
-        "transitions": transitions_used,
-    })
+
+@app.get("/api/job/<job_id>")
+def api_job(job_id: str):
+    with JOBS_LOCK:
+        job = JOBS.get(job_id)
+        if not job:
+            return jsonify({"ok": False, "error": "job not found"}), 404
+        return jsonify({"ok": True, **job})
 
 
 @app.get("/api/video/<name>")
