@@ -121,6 +121,9 @@ def api_generate():
     if motion_spec not in SCENE_MOTIONS:
         motion_spec = DEFAULT_MOTION
 
+    # Optional per-image motion override list (CSV; blanks fall back to motion_spec).
+    per_image_motions_raw = request.form.get("per_image_motions") or ""
+
     bg_file = request.files.get("background")
 
     job_id = uuid.uuid4().hex[:10]
@@ -171,6 +174,17 @@ def api_generate():
     else:
         transition_arg = transition_spec  # type: ignore[assignment]
 
+    # Per-scene motion: blanks fall back to the global motion_spec.
+    n_scenes = len(image_paths)
+    per_image_motion_list = [x.strip() for x in per_image_motions_raw.split(",")] if per_image_motions_raw else []
+    if per_image_motion_list and any(per_image_motion_list):
+        motion_arg: "str | list[str]" = []
+        for i in range(n_scenes):
+            override = per_image_motion_list[i].strip() if i < len(per_image_motion_list) else ""
+            motion_arg.append(override if override in SCENE_MOTIONS and override else motion_spec)
+    else:
+        motion_arg = motion_spec
+
     try:
         _, transitions_used = generate(
             images=image_paths,
@@ -182,7 +196,7 @@ def api_generate():
             background=bg_path,
             look=look_spec,
             aspect=aspect_spec,
-            motion=motion_spec,
+            motion=motion_arg,
         )
     except Exception as e:
         return jsonify({"error": str(e)}), 500

@@ -372,8 +372,9 @@ h2 {
 .thumb .pin-select:focus { outline: 1px solid var(--gold); }
 .thumb .pin-select option { color: #18120a; background: #fff; }
 
-.thumb .trans-select {
-  position: absolute; left: 4px; right: 4px; bottom: 4px;
+.thumb .trans-select,
+.thumb .motion-select {
+  position: absolute; left: 4px; right: 4px;
   background: rgba(0, 0, 0, 0.78);
   color: #fff;
   border: 1px solid var(--border);
@@ -383,9 +384,12 @@ h2 {
   font-family: inherit;
   max-width: calc(100% - 8px);
 }
-.thumb .trans-select:focus { outline: 1px solid var(--gold); border-color: var(--gold); }
+.thumb .trans-select { bottom: 4px; }
+.thumb .motion-select { bottom: 32px; }
+.thumb .trans-select:focus,
+.thumb .motion-select:focus { outline: 1px solid var(--gold); border-color: var(--gold); }
 .thumb .trans-badge {
-  position: absolute; left: 6px; bottom: 38px;
+  position: absolute; left: 6px; bottom: 60px;
   background: linear-gradient(180deg, var(--gold-light), var(--gold));
   color: #2a1d05;
   font-size: 10px; font-weight: 700;

@@ -24,9 +24,31 @@ const downloadLink = document.getElementById("download");
 
 let backgroundFile = null;
 
-// item = {id, file, url, isVideo, transitionOverride, pinnedPosition}
+// item = {id, file, url, isVideo, transitionOverride, motionOverride, pinnedPosition}
 //   pinnedPosition: null | number (1-based) | "last"
 let items = [];
+
+// Motion options shown in the per-thumb motion selector.
+const MOTION_OPTIONS = [
+  ["",          "🎥 ברירת מחדל"],
+  ["none",      "ללא תנועה"],
+  ["zoomin",    "זום-אין"],
+  ["zoomout",   "זום-אאוט"],
+  ["kenburns",  "קן-ברנס"],
+  ["panleft",   "פאן שמאלה"],
+  ["panright",  "פאן ימינה"],
+  ["panup",     "פאן למעלה"],
+  ["pandown",   "פאן למטה"],
+  ["flash",     "פלאש"],
+  ["random",    "🎲 אקראי"],
+];
+
+function buildMotionOptions(selected) {
+  return MOTION_OPTIONS.map(([val, label]) => {
+    const sel = val === (selected || "") ? " selected" : "";
+    return `<option value="${val}"${sel}>${label}</option>`;
+  }).join("");
+}
 let dragId = null;
 let allTransitions = [];
 
@@ -221,12 +243,14 @@ function render() {
       : `<img src="${item.url}" alt="" />`;
     const pinned = isPinned(item);
     const pinMarkup = `<select class="pin-select" data-id="${item.id}" title="הצמד למיקום קבוע">${buildPinOptions(item, items.length)}</select>`;
+    const motionMarkup = `<select class="motion-select" data-id="${item.id}" title="תנועה ספציפית לתמונה זו">${buildMotionOptions(item.motionOverride || "")}</select>`;
     li.innerHTML = `
       ${media}
       <span class="idx${pinned ? " idx-pinned" : ""}">${idx + 1}</span>
       <div class="pin-chip${pinned ? " pinned" : ""}">${pinMarkup}</div>
       ${badge}
       <button class="remove" title="הסר" data-id="${item.id}">×</button>
+      ${motionMarkup}
       ${selectMarkup}
     `;
     thumbList.appendChild(li);
@@ -249,6 +273,7 @@ function addFiles(fileList) {
       url: URL.createObjectURL(file),
       isVideo: file.type.startsWith("video/"),
       transitionOverride: "",
+      motionOverride: "",
       pinnedPosition: null,
     });
   }
@@ -315,6 +340,12 @@ thumbList.addEventListener("change", (e) => {
     setPin(pinSel.dataset.id, pinSel.value);
     return;
   }
+  const motionSel = e.target.closest(".motion-select");
+  if (motionSel) {
+    const item = items.find((i) => i.id === motionSel.dataset.id);
+    if (item) { item.motionOverride = motionSel.value; render(); }
+    return;
+  }
   const sel = e.target.closest(".trans-select");
   if (!sel) return;
   const item = items.find((i) => i.id === sel.dataset.id);
@@ -325,7 +356,7 @@ thumbList.addEventListener("change", (e) => {
 
 // Prevent the per-thumb selects from initiating a drag.
 thumbList.addEventListener("mousedown", (e) => {
-  if (e.target.closest(".trans-select") || e.target.closest(".pin-select")) {
+  if (e.target.closest(".trans-select") || e.target.closest(".pin-select") || e.target.closest(".motion-select")) {
     const t = e.target.closest(".thumb");
     if (t) t.draggable = false;
   }
@@ -437,6 +468,11 @@ generateBtn.addEventListener("click", async () => {
   fd.append("look", (lookSelect && lookSelect.value) || "none");
   fd.append("aspect", (aspectSelect && aspectSelect.value) || "9:16");
   fd.append("motion", (motionSelect && motionSelect.value) || "none");
+  // Per-scene motion overrides (one entry per scene).
+  const motionOverrides = items.map((it) => it.motionOverride || "");
+  if (motionOverrides.some((v) => v)) {
+    fd.append("per_image_motions", motionOverrides.join(","));
+  }
   // Per-image overrides — one entry per gap (items.length - 1).
   const overrides = items.slice(0, -1).map((it) => it.transitionOverride || "");
   if (overrides.some((v) => v)) {

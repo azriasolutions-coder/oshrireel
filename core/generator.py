@@ -130,16 +130,19 @@ NATIVE_XFADE_TRANSITIONS: tuple[str, ...] = (
 
 ALL_TRANSITIONS: tuple[str, ...] = NATIVE_XFADE_TRANSITIONS + (CUT_KEYWORD,)
 
-# Curated "auto mix" — looks the most natural on portrait Reels-style content.
+# Curated "auto mix" — diversified for WOW factor on portrait Reels content.
+# Heavy `fade` weight removed; more cinematic/dramatic transitions in rotation.
 AUTO_MIX_TRANSITIONS: tuple[str, ...] = (
-    "fade", "fade", "fade",  # weighted higher: most common in the reference video
     "slideleft", "slideright", "slideup", "slidedown",
-    "smoothleft", "smoothright",
-    "coverleft", "coverright",
+    "smoothleft", "smoothright", "smoothup", "smoothdown",
+    "coverleft", "coverright", "coverup", "coverdown",
     "circleopen", "circleclose",
     "radial", "zoomin",
     "wipeleft", "wiperight",
+    "diagtl", "diagbr",
+    "revealleft", "revealright",
     "pixelize",
+    "fade",  # one fade in the pool for occasional breather
 )
 
 
@@ -295,7 +298,7 @@ def build_filtergraph(
     look: str = DEFAULT_LOOK,
     width: int = WIDTH,
     height: int = HEIGHT,
-    motion: str = DEFAULT_MOTION,
+    motion: "str | Sequence[str]" = DEFAULT_MOTION,
 ) -> tuple[str, str]:
     """Build the full filter graph and return (graph, final_label).
 
@@ -326,8 +329,18 @@ def build_filtergraph(
             )
             bg_labels[i] = f"bgchunk{i}"
 
+    # Resolve motion to a per-scene list (allows per-image override).
+    if isinstance(motion, str):
+        motion_per_scene = [motion] * n_images
+    else:
+        motion_per_scene = [str(m) if m else DEFAULT_MOTION for m in motion]
+        while len(motion_per_scene) < n_images:
+            motion_per_scene.append(DEFAULT_MOTION)
+
     for i in range(n_images):
-        parts.append(per_image_filter(i, hold, flags[i], bg_labels[i], look, width, height, motion))
+        parts.append(per_image_filter(
+            i, hold, flags[i], bg_labels[i], look, width, height, motion_per_scene[i]
+        ))
 
     if n_images == 1:
         return ";".join(parts), "v0"
@@ -380,7 +393,7 @@ def generate(
     background: Path | None = None,
     look: str = DEFAULT_LOOK,
     aspect: str | None = DEFAULT_ASPECT,
-    motion: str = DEFAULT_MOTION,
+    motion: "str | Sequence[str]" = DEFAULT_MOTION,
 ) -> tuple[Path, list[str]]:
     """Render the video. Returns (output_path, transitions_used_per_gap)."""
     image_list = [Path(p) for p in images]
