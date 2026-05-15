@@ -27,7 +27,7 @@ let watermarkFile = null;
 const TEMPLATES = {
   reference: { aspect: "9:16",    hold: 2.4, xfade: 0.35,
                transition: "cut,cut,cut,fade,slideleft,cut,fade,cut,slideleft,cut",
-               look: "warm",      motion: "random",   speed: 1 },
+               look: "warm",      motion: "kenburns", speed: 1 },
   shabbat:   { aspect: "9:16",    hold: 2.8, xfade: 0.5, transition: "auto",   look: "warm",      motion: "kenburns", speed: 1 },
   festive:   { aspect: "9:16",    hold: 2.3, xfade: 0.4, transition: "auto",   look: "vivid",     motion: "random",   speed: 1 },
   lesson:    { aspect: "9:16",    hold: 3.2, xfade: 0.6, transition: "fade",   look: "warm",      motion: "kenburns", speed: 1 },
@@ -139,6 +139,51 @@ function transitionLabel(name) {
 }
 
 function uid() { return Math.random().toString(36).slice(2, 9); }
+
+// Shrink an image File via <canvas> to keep uploads small on cellular.
+// Returns the resized File or the original (videos / already-small / errors).
+async function resizeForUpload(file, maxDim = 1600, quality = 0.85) {
+  if (!file || !file.type || !file.type.startsWith("image/")) return file;
+  if (file.size && file.size < 400 * 1024) return file;  // already <400KB
+  let img;
+  const url = URL.createObjectURL(file);
+  try {
+    img = await new Promise((resolve, reject) => {
+      const i = new Image();
+      i.onload = () => resolve(i);
+      i.onerror = () => reject(new Error("image load failed"));
+      i.src = url;
+    });
+  } catch (_) {
+    URL.revokeObjectURL(url);
+    return file;
+  }
+  const w0 = img.naturalWidth || img.width;
+  const h0 = img.naturalHeight || img.height;
+  const longest = Math.max(w0, h0);
+  if (longest <= maxDim) {
+    URL.revokeObjectURL(url);
+    return file;
+  }
+  const scale = maxDim / longest;
+  const w = Math.round(w0 * scale);
+  const h = Math.round(h0 * scale);
+  const canvas = document.createElement("canvas");
+  canvas.width = w;
+  canvas.height = h;
+  const ctx = canvas.getContext("2d");
+  ctx.drawImage(img, 0, 0, w, h);
+  URL.revokeObjectURL(url);
+  const blob = await new Promise((resolve) =>
+    canvas.toBlob(resolve, "image/jpeg", quality)
+  );
+  if (!blob) return file;
+  const newName = file.name.replace(/\.[^.]+$/, "") + ".jpg";
+  return new File([blob], newName, {
+    type: "image/jpeg",
+    lastModified: file.lastModified,
+  });
+}
 
 function refreshDurationHint() {
   const n = items.length;
@@ -539,11 +584,16 @@ generateBtn.addEventListener("click", async () => {
   if (items.some(isPinned)) applyPinsKeepOrder();
   generateBtn.disabled = true;
   statusEl.classList.remove("error");
-  statusEl.textContent = "מייצר סרטון... זה לוקח כמה שניות.";
   resultCard.hidden = true;
 
   const fd = new FormData();
-  for (const it of items) fd.append("images", it.file, it.file.name);
+  // Resize each image client-side so uploads finish fast even on cellular.
+  // Videos pass through unchanged.
+  for (let i = 0; i < items.length; i++) {
+    statusEl.textContent = `מכין תמונה ${i + 1}/${items.length}…`;
+    const resized = await resizeForUpload(items[i].file);
+    fd.append("images", resized, resized.name);
+  }
   fd.append("music", musicSelect.value || "");
   fd.append("hold", holdInput.value || "2.5");
   fd.append("xfade", xfadeInput.value || "0.4");
@@ -562,10 +612,13 @@ generateBtn.addEventListener("click", async () => {
     fd.append("per_image_transitions", overrides.join(","));
   }
   if (backgroundFile) {
-    fd.append("background", backgroundFile, backgroundFile.name);
+    statusEl.textContent = "מכין רקע…";
+    const bgResized = await resizeForUpload(backgroundFile);
+    fd.append("background", bgResized, bgResized.name);
   }
   if (watermarkFile && watermarkPosSelect && watermarkPosSelect.value !== "none") {
-    fd.append("watermark", watermarkFile, watermarkFile.name);
+    const wmResized = await resizeForUpload(watermarkFile, 800, 0.9);
+    fd.append("watermark", wmResized, wmResized.name);
   }
   fd.append("watermark_pos", (watermarkPosSelect && watermarkPosSelect.value) || "none");
   fd.append("speed", (speedSelect && speedSelect.value) || "1");
@@ -576,6 +629,7 @@ generateBtn.addEventListener("click", async () => {
   }
 
   try {
+    statusEl.textContent = "מעלה לשרת ומייצר סרטון…";
     const r = await fetch("/api/generate", { method: "POST", body: fd });
     let data = null;
     const raw = await r.text();
