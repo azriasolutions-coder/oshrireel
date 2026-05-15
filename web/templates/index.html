@@ -47,6 +47,21 @@
 
     <section class="card settings">
       <h2>הגדרות</h2>
+      <div class="grid" style="margin-bottom:14px;">
+        <label style="grid-column: 1 / -1;">
+          <span>⚡ תבנית מהירה (לחיצה אחת = הכל מוגדר)</span>
+          <select id="template">
+            <option value="custom">— מותאם אישית —</option>
+            <option value="reference" selected>🎯 כמו במקור — בדיוק כמו הסרטון לדוגמה של הרב</option>
+            <option value="shabbat">📅 זמני שבת (סטנדרט הרב אביכזר)</option>
+            <option value="festive">🎉 ברכת חג / שמחה</option>
+            <option value="lesson">📖 שיעור תורה / דברי תורה</option>
+            <option value="news">📰 חדשות / סיכום שבועי</option>
+            <option value="promo">✨ פרסומת / קמפיין</option>
+            <option value="dramatic">🔥 דרמטי-מקסימום (חזק במיוחד)</option>
+          </select>
+        </label>
+      </div>
       <div class="grid">
         <label>
           <span>שיר רקע</span>
@@ -119,6 +134,31 @@
       </div>
       <p class="hint">לחץ על תמונה כדי לבחור אפקט מעבר שונה ספציפי לאחריה. ה-look משפיע על כל הסצנות יחד.</p>
 
+      <div class="grid grid-2" style="margin-top:14px;">
+        <label>
+          <span>🏃 מהירות הסרטון</span>
+          <select id="speed">
+            <option value="1" selected>1× — מהירות רגילה</option>
+            <option value="0.5">0.5× — איטי מאוד (סלואו-מו)</option>
+            <option value="0.75">0.75× — קצת איטי</option>
+            <option value="1.25">1.25× — קצת מהיר</option>
+            <option value="1.5">1.5× — מהיר</option>
+            <option value="2">2× — מהיר מאוד</option>
+          </select>
+        </label>
+        <label>
+          <span>📍 מיקום סמליל (watermark)</span>
+          <select id="watermark-pos">
+            <option value="none" selected>ללא סמליל</option>
+            <option value="tl">פינה עליונה-שמאל</option>
+            <option value="tr">פינה עליונה-ימין</option>
+            <option value="bl">פינה תחתונה-שמאל</option>
+            <option value="br">פינה תחתונה-ימין</option>
+            <option value="center">מרכז (שקוף)</option>
+          </select>
+        </label>
+      </div>
+
       <div class="grid" style="margin-top:14px;">
         <label style="grid-column: 1 / -1;">
           <span>רקע מאחורה (תמונה / וידאו · אופציונלי)</span>
@@ -128,6 +168,16 @@
             </label>
             <span id="bg-name" class="hint" style="margin:0;"></span>
             <button id="bg-clear" class="btn ghost small" hidden>הסר</button>
+          </div>
+        </label>
+        <label style="grid-column: 1 / -1;">
+          <span>סמליל / לוגו (PNG עם רקע שקוף עדיף)</span>
+          <div class="row gap">
+            <label class="btn small">
+              <input type="file" id="wm-upload" accept="image/*" hidden /> בחר סמליל
+            </label>
+            <span id="wm-name" class="hint" style="margin:0;"></span>
+            <button id="wm-clear" class="btn ghost small" hidden>הסר</button>
           </div>
         </label>
       </div>

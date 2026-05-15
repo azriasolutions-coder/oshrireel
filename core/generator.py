@@ -230,6 +230,56 @@ def list_music(folder: Path) -> list[Path]:
     return sorted(p for p in folder.iterdir() if p.suffix.lower() in AUDIO_EXTS)
 
 
+def _escape_drawtext(s: str) -> str:
+    """Escape user text so ffmpeg's drawtext doesn't choke on it."""
+    return (s.replace("\\", "\\\\")
+             .replace("'", "’")  # smart quote — keep visual fidelity
+             .replace(":", "\\:")
+             .replace("%", "\\%"))
+
+
+# Common Hebrew TTF locations (apt fonts-noto, fonts-dejavu, manual install).
+_HEBREW_FONT_CANDIDATES = (
+    "/usr/share/fonts/truetype/noto/NotoSansHebrew-Bold.ttf",
+    "/usr/share/fonts/truetype/noto/NotoSansHebrew-Regular.ttf",
+    "/usr/share/fonts/opentype/noto/NotoSansHebrew-Bold.ttf",
+    "/usr/share/fonts/opentype/noto/NotoSansHebrew-Regular.ttf",
+    "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",
+    "C:/Windows/Fonts/arialbd.ttf",
+    "C:/Windows/Fonts/arial.ttf",
+)
+
+
+def _hebrew_font() -> str | None:
+    for f in _HEBREW_FONT_CANDIDATES:
+        if Path(f).exists():
+            return f
+    return None
+
+
+def text_overlay_filter(text: str, width: int, height: int) -> str:
+    """Build a drawtext filter for an overlay caption. RTL Hebrew supported
+    via text_shaping=1 (requires ffmpeg built with harfbuzz)."""
+    if not text:
+        return ""
+    font = _hebrew_font()
+    # Escape colon (separator) AND backslash for ffmpeg filter syntax.
+    fontfile_clause = ""
+    if font:
+        font_escaped = font.replace("\\", "/").replace(":", "\\:")
+        fontfile_clause = f"fontfile='{font_escaped}':"
+    escaped = _escape_drawtext(text.strip())
+    fontsize = max(28, min(48, height // 22))
+    return (
+        f"drawtext={fontfile_clause}"
+        f"text='{escaped}':"
+        f"fontcolor=white:fontsize={fontsize}:"
+        f"x=(w-text_w)/2:y=h-text_h-{height//12}:"
+        f"box=1:boxcolor=black@0.55:boxborderw=14:"
+        f"text_shaping=1"
+    )
+
+
 def per_image_filter(
     idx: int,
     hold: float,
@@ -239,6 +289,7 @@ def per_image_filter(
     width: int = WIDTH,
     height: int = HEIGHT,
     motion: str = DEFAULT_MOTION,
+    text: str = "",
 ) -> str:
     """Per-scene branch: backdrop + fitted foreground.
 
@@ -271,6 +322,8 @@ def per_image_filter(
     look_step = f"{look_chain}," if look_chain else ""
     motion_chain = motion_filter_chain(motion, hold, width, height)
     motion_step = f"{motion_chain}," if motion_chain else ""
+    text_chain = text_overlay_filter(text, width, height)
+    text_step = f"{text_chain}," if text_chain else ""
     return (
         f"{bg_branch}"
         f"[{idx}:v]"
@@ -286,6 +339,7 @@ def per_image_filter(
         f"format=yuv420p,"
         f"{look_step}"
         f"{motion_step}"
+        f"{text_step}"
         f"trim=duration={hold},setpts=PTS-STARTPTS,fps={FPS}"
         f"[v{idx}]"
     )
@@ -368,6 +422,7 @@ def build_filtergraph(
     width: int = WIDTH,
     height: int = HEIGHT,
     motion: "str | Sequence[str]" = DEFAULT_MOTION,
+    texts: Sequence[str] | None = None,
 ) -> tuple[str, str]:
     """Build the full filter graph and return (graph, final_label).
 
@@ -406,9 +461,14 @@ def build_filtergraph(
         while len(motion_per_scene) < n_images:
             motion_per_scene.append(DEFAULT_MOTION)
 
+    text_per_scene = list(texts or [])
+    while len(text_per_scene) < n_images:
+        text_per_scene.append("")
+
     for i in range(n_images):
         parts.append(per_image_filter(
-            i, hold, flags[i], bg_labels[i], look, width, height, motion_per_scene[i]
+            i, hold, flags[i], bg_labels[i], look, width, height,
+            motion_per_scene[i], text_per_scene[i],
         ))
 
     if n_images == 1:
@@ -463,6 +523,10 @@ def generate(
     look: str = DEFAULT_LOOK,
     aspect: str | None = DEFAULT_ASPECT,
     motion: "str | Sequence[str]" = DEFAULT_MOTION,
+    texts: Sequence[str] | None = None,
+    speed: float = 1.0,
+    watermark: Path | None = None,
+    watermark_pos: str = "br",
 ) -> tuple[Path, list[str]]:
     """Render the video. Returns (output_path, transitions_used_per_gap)."""
     image_list = [Path(p) for p in images]
@@ -495,11 +559,30 @@ def generate(
     bg_input_idx = n if bg_path is not None else None
 
     width, height = resolve_aspect(aspect)
-    graph, final = build_filtergraph(n, hold, xfade, transitions, clip_flags, bg_input_idx, look, width, height, motion)
+    graph, final = build_filtergraph(
+        n, hold, xfade, transitions, clip_flags, bg_input_idx,
+        look, width, height, motion, texts,
+    )
 
     if fade_out > 0:
         graph += f";[{final}]fade=t=out:st={max(0, duration - fade_out):.3f}:d={fade_out}[vout]"
         final = "vout"
+
+    # Speed ramping (applies to both video and any music later).
+    speed_factor = max(0.25, min(4.0, float(speed or 1.0)))
+    if abs(speed_factor - 1.0) > 0.01:
+        graph += f";[{final}]setpts=PTS/{speed_factor:.3f}[vspd]"
+        final = "vspd"
+        duration = duration / speed_factor
+
+    # Watermark overlay step (executed after speed ramping so it stays sharp).
+    wm_path: Path | None = None
+    if watermark is not None and Path(watermark).exists():
+        wm_path = Path(watermark)
+    wm_input_idx: int | None = None
+    if wm_path is not None:
+        # Index is appended after scenes/bg/music — computed when cmd is built.
+        pass
 
     cmd: list[str] = ["ffmpeg", "-hide_banner", "-loglevel", "error", "-y"]
     for p, is_clip in zip(image_list, clip_flags):
@@ -522,13 +605,53 @@ def generate(
         audio_input_index = n + (1 if bg_input_idx is not None else 0)
         cmd += ["-stream_loop", "-1", "-i", str(music)]
 
+    if wm_path is not None:
+        wm_input_idx = len(cmd[1:]) // 2  # approximate — recompute properly
+        # Recompute index by counting -i args we've added so far.
+        wm_input_idx = sum(1 for arg in cmd if arg == "-i")
+        cmd += ["-loop", "1", "-i", str(wm_path)]
+
+        # Position margin: 4% of width/height.
+        mx, my = max(8, width // 25), max(8, height // 25)
+        positions = {
+            "tl": f"x={mx}:y={my}",
+            "tr": f"x=W-w-{mx}:y={my}",
+            "bl": f"x={mx}:y=H-h-{my}",
+            "br": f"x=W-w-{mx}:y=H-h-{my}",
+            "center": "x=(W-w)/2:y=(H-h)/2",
+        }
+        pos_expr = positions.get(watermark_pos, positions["br"])
+        # Cap watermark to ~22% of the shorter side, preserve alpha.
+        wm_size = max(60, min(width, height) // 5)
+        opacity_alpha = 0.4 if watermark_pos == "center" else 0.92
+        graph += (
+            f";[{wm_input_idx}:v]format=rgba,"
+            f"scale='if(gt(iw\\,ih)\\,{wm_size}\\,-1)':'if(gt(ih\\,iw)\\,{wm_size}\\,-1)',"
+            f"colorchannelmixer=aa={opacity_alpha}"
+            f"[wm];"
+            f"[{final}][wm]overlay={pos_expr}:format=auto[vwm]"
+        )
+        final = "vwm"
+
     cmd += ["-filter_complex", graph, "-map", f"[{final}]"]
 
     if audio_input_index is not None:
+        # atempo capped to [0.5, 2.0] per step; chain for larger ratios.
+        atempo_parts: list[str] = []
+        s = speed_factor
+        while s > 2.0:
+            atempo_parts.append("atempo=2.0")
+            s /= 2.0
+        while s < 0.5:
+            atempo_parts.append("atempo=0.5")
+            s *= 2.0
+        if abs(s - 1.0) > 0.01:
+            atempo_parts.append(f"atempo={s:.4f}")
+        afilter = ",".join(atempo_parts) if atempo_parts else "anull"
         cmd += [
             "-map", f"{audio_input_index}:a",
             "-c:a", "aac", "-b:a", "192k",
-            "-af", f"afade=t=out:st={max(0, duration - fade_out):.3f}:d={fade_out}",
+            "-af", f"{afilter},afade=t=out:st={max(0, duration - fade_out):.3f}:d={fade_out}",
             "-shortest",
         ]
 

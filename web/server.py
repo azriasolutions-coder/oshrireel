@@ -124,7 +124,19 @@ def api_generate():
     # Optional per-image motion override list (CSV; blanks fall back to motion_spec).
     per_image_motions_raw = request.form.get("per_image_motions") or ""
 
+    # Speed multiplier 0.5..2.0 (further clamped in generate()).
+    try:
+        speed_val = float(request.form.get("speed") or 1.0)
+    except ValueError:
+        speed_val = 1.0
+
+    watermark_pos = (request.form.get("watermark_pos") or "none").strip()
+
+    # Per-scene Hebrew text overlays (CSV-style — `||` separates, blanks for none).
+    texts_raw = request.form.get("per_image_texts") or ""
+
     bg_file = request.files.get("background")
+    wm_file = request.files.get("watermark")
 
     job_id = uuid.uuid4().hex[:10]
     job_dir = WORKDIR / job_id
@@ -157,6 +169,20 @@ def api_generate():
         if suffix in MEDIA_EXTS:
             bg_path = job_dir / f"bg{suffix}"
             bg_file.save(bg_path)
+
+    wm_path: Path | None = None
+    if wm_file and wm_file.filename and watermark_pos != "none":
+        suffix = Path(wm_file.filename).suffix.lower()
+        if suffix in {".png", ".jpg", ".jpeg", ".webp"}:
+            wm_path = job_dir / f"watermark{suffix}"
+            wm_file.save(wm_path)
+
+    # Parse per-scene texts: split by "||" so individual texts can contain commas.
+    texts_list: list[str] = []
+    if texts_raw:
+        texts_list = [t.strip() for t in texts_raw.split("||")]
+    while len(texts_list) < len(image_paths):
+        texts_list.append("")
 
     OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
     output_name = f"video_{int(time.time())}_{job_id}.mp4"
@@ -197,6 +223,10 @@ def api_generate():
             look=look_spec,
             aspect=aspect_spec,
             motion=motion_arg,
+            texts=texts_list,
+            speed=speed_val,
+            watermark=wm_path,
+            watermark_pos=watermark_pos,
         )
     except Exception as e:
         return jsonify({"error": str(e)}), 500

@@ -11,7 +11,43 @@ const transitionSelect = document.getElementById("transition");
 const lookSelect = document.getElementById("look");
 const aspectSelect = document.getElementById("aspect");
 const motionSelect = document.getElementById("motion");
+const templateSelect = document.getElementById("template");
+const speedSelect = document.getElementById("speed");
+const watermarkPosSelect = document.getElementById("watermark-pos");
+const wmUpload = document.getElementById("wm-upload");
+const wmName = document.getElementById("wm-name");
+const wmClearBtn = document.getElementById("wm-clear");
 const durationHint = document.getElementById("duration-hint");
+
+let watermarkFile = null;
+
+// 1-click presets — set every control to a tasteful combination.
+// `reference` is calibrated to recreate the rabbi's source Shabbat video:
+//   ~50% hard cuts, 25% short fade, 25% slide-left; warm look; zoom-heavy motion.
+const TEMPLATES = {
+  reference: { aspect: "9:16",    hold: 2.4, xfade: 0.35,
+               transition: "cut,cut,cut,fade,slideleft,cut,fade,cut,slideleft,cut",
+               look: "warm",      motion: "random",   speed: 1 },
+  shabbat:   { aspect: "9:16",    hold: 2.8, xfade: 0.5, transition: "auto",   look: "warm",      motion: "kenburns", speed: 1 },
+  festive:   { aspect: "9:16",    hold: 2.3, xfade: 0.4, transition: "auto",   look: "vivid",     motion: "random",   speed: 1 },
+  lesson:    { aspect: "9:16",    hold: 3.2, xfade: 0.6, transition: "fade",   look: "warm",      motion: "kenburns", speed: 1 },
+  news:      { aspect: "9:16",    hold: 2.0, xfade: 0.3, transition: "auto",   look: "cinematic", motion: "zoomin",   speed: 1 },
+  promo:     { aspect: "9:16",    hold: 1.8, xfade: 0.3, transition: "auto",   look: "vivid",     motion: "random",   speed: 1 },
+  dramatic:  { aspect: "9:16-hd", hold: 1.6, xfade: 0.25, transition: "cycle", look: "noir",      motion: "random",   speed: 1 },
+};
+
+function applyTemplate(name) {
+  const t = TEMPLATES[name];
+  if (!t) return;
+  if (aspectSelect)     aspectSelect.value     = t.aspect;
+  if (holdInput)        holdInput.value        = t.hold;
+  if (xfadeInput)       xfadeInput.value       = t.xfade;
+  if (transitionSelect) transitionSelect.value = t.transition;
+  if (lookSelect)       lookSelect.value       = t.look;
+  if (motionSelect)     motionSelect.value     = t.motion;
+  if (speedSelect)      speedSelect.value      = String(t.speed);
+  refreshDurationHint();
+}
 const generateBtn = document.getElementById("generate");
 const shuffleBtn = document.getElementById("shuffle");
 const bgUpload = document.getElementById("bg-upload");
@@ -24,7 +60,8 @@ const downloadLink = document.getElementById("download");
 
 let backgroundFile = null;
 
-// item = {id, file, url, isVideo, transitionOverride, motionOverride, pinnedPosition}
+// item = {id, file, url, isVideo, transitionOverride, motionOverride,
+//         textOverlay, pinnedPosition}
 //   pinnedPosition: null | number (1-based) | "last"
 let items = [];
 
@@ -247,12 +284,15 @@ function render() {
     const pinned = isPinned(item);
     const pinMarkup = `<select class="pin-select" data-id="${item.id}" title="הצמד למיקום קבוע">${buildPinOptions(item, items.length)}</select>`;
     const motionMarkup = `<select class="motion-select" data-id="${item.id}" title="תנועה ספציפית לתמונה זו">${buildMotionOptions(item.motionOverride || "")}</select>`;
+    const textValue = (item.textOverlay || "").replace(/"/g, "&quot;");
+    const textMarkup = `<input class="text-overlay" type="text" data-id="${item.id}" value="${textValue}" placeholder="כתובית (אופציונלי)" maxlength="80" />`;
     li.innerHTML = `
       ${media}
       <span class="idx${pinned ? " idx-pinned" : ""}">${idx + 1}</span>
       <div class="pin-chip${pinned ? " pinned" : ""}">${pinMarkup}</div>
       ${badge}
       <button class="remove" title="הסר" data-id="${item.id}">×</button>
+      ${textMarkup}
       ${motionMarkup}
       ${selectMarkup}
     `;
@@ -277,6 +317,7 @@ function addFiles(fileList) {
       isVideo: file.type.startsWith("video/"),
       transitionOverride: "",
       motionOverride: "",
+      textOverlay: "",
       pinnedPosition: null,
     });
   }
@@ -332,6 +373,34 @@ if (bgClearBtn) {
   });
 }
 
+if (wmUpload) {
+  wmUpload.addEventListener("change", (e) => {
+    const f = e.target.files?.[0];
+    if (!f) return;
+    watermarkFile = f;
+    wmName.textContent = f.name;
+    wmClearBtn.hidden = false;
+    e.target.value = "";
+  });
+}
+if (wmClearBtn) {
+  wmClearBtn.addEventListener("click", () => {
+    watermarkFile = null;
+    wmName.textContent = "";
+    wmClearBtn.hidden = true;
+  });
+}
+
+if (templateSelect) {
+  templateSelect.addEventListener("change", (e) => {
+    if (e.target.value !== "custom") applyTemplate(e.target.value);
+  });
+  // Apply the default-selected template on first load (shabbat).
+  if (templateSelect.value && templateSelect.value !== "custom") {
+    applyTemplate(templateSelect.value);
+  }
+}
+
 thumbList.addEventListener("click", (e) => {
   const btn = e.target.closest(".remove");
   if (btn) removeItem(btn.dataset.id);
@@ -357,9 +426,20 @@ thumbList.addEventListener("change", (e) => {
   render();
 });
 
-// Prevent the per-thumb selects from initiating a drag.
+// Text overlay: update on input (don't re-render — keeps focus on the field).
+thumbList.addEventListener("input", (e) => {
+  const txt = e.target.closest(".text-overlay");
+  if (!txt) return;
+  const item = items.find((i) => i.id === txt.dataset.id);
+  if (item) item.textOverlay = txt.value;
+});
+
+// Prevent the per-thumb controls from initiating a drag.
 thumbList.addEventListener("mousedown", (e) => {
-  if (e.target.closest(".trans-select") || e.target.closest(".pin-select") || e.target.closest(".motion-select")) {
+  if (e.target.closest(".trans-select")
+   || e.target.closest(".pin-select")
+   || e.target.closest(".motion-select")
+   || e.target.closest(".text-overlay")) {
     const t = e.target.closest(".thumb");
     if (t) t.draggable = false;
   }
@@ -483,6 +563,16 @@ generateBtn.addEventListener("click", async () => {
   }
   if (backgroundFile) {
     fd.append("background", backgroundFile, backgroundFile.name);
+  }
+  if (watermarkFile && watermarkPosSelect && watermarkPosSelect.value !== "none") {
+    fd.append("watermark", watermarkFile, watermarkFile.name);
+  }
+  fd.append("watermark_pos", (watermarkPosSelect && watermarkPosSelect.value) || "none");
+  fd.append("speed", (speedSelect && speedSelect.value) || "1");
+  // Per-scene texts: use "||" separator since text may contain commas/quotes.
+  const texts = items.map((it) => (it.textOverlay || "").trim());
+  if (texts.some((t) => t)) {
+    fd.append("per_image_texts", texts.join("||"));
   }
 
   try {
