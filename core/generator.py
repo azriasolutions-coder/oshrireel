@@ -91,12 +91,22 @@ SCENE_MOTIONS: tuple[str, ...] = (
     "pandown",
     "kenburns",
     "flash",
+    "shake",
+    "pulse",
+    "punch",
     "random",
 )
 DEFAULT_MOTION = "none"
-# Curated pool for `random` — keeps each scene visually distinct.
+# Curated pool for `random` — favors the punchiest, most visible motions.
 _RANDOM_MOTION_POOL: tuple[str, ...] = (
-    "zoomin", "zoomout", "kenburns", "panleft", "panright", "flash",
+    "zoomin", "zoomin",       # weighted: 2× — most expected
+    "zoomout", "zoomout",
+    "kenburns",
+    "panleft", "panright",
+    "flash", "flash",         # weighted: 2× — visible punctuation
+    "shake",
+    "pulse",
+    "punch",
 )
 
 
@@ -111,30 +121,49 @@ def motion_filter_chain(motion: str, hold: float, width: int, height: int) -> st
         return ""
     total = max(1, int(hold * FPS))
     zp = f"d=1:s={width}x{height}:fps={FPS}"
+    # Zoom amounts intentionally aggressive — subtle reads as "static" on
+    # short Reels-style clips; the brief is "dramatic motion".
     if name == "zoomin":
-        return f"zoompan=z='1+0.18*on/{total}':{zp}"
+        return f"zoompan=z='1+0.30*on/{total}':{zp}"
     if name == "zoomout":
-        return f"zoompan=z='1.18-0.18*on/{total}':{zp}"
+        return f"zoompan=z='1.30-0.30*on/{total}':{zp}"
     if name == "panleft":
-        return (f"zoompan=z='1.10':x='(1-on/{total})*(iw-iw/zoom)':"
+        return (f"zoompan=z='1.15':x='(1-on/{total})*(iw-iw/zoom)':"
                 f"y='(ih-ih/zoom)/2':{zp}")
     if name == "panright":
-        return (f"zoompan=z='1.10':x='(on/{total})*(iw-iw/zoom)':"
+        return (f"zoompan=z='1.15':x='(on/{total})*(iw-iw/zoom)':"
                 f"y='(ih-ih/zoom)/2':{zp}")
     if name == "panup":
-        return (f"zoompan=z='1.10':x='(iw-iw/zoom)/2':"
+        return (f"zoompan=z='1.15':x='(iw-iw/zoom)/2':"
                 f"y='(1-on/{total})*(ih-ih/zoom)':{zp}")
     if name == "pandown":
-        return (f"zoompan=z='1.10':x='(iw-iw/zoom)/2':"
+        return (f"zoompan=z='1.15':x='(iw-iw/zoom)/2':"
                 f"y='(on/{total})*(ih-ih/zoom)':{zp}")
     if name == "kenburns":
-        return (f"zoompan=z='1+0.12*on/{total}':"
-                f"x='(iw-iw/zoom)*0.3*on/{total}':"
-                f"y='(ih-ih/zoom)*0.3*on/{total}':{zp}")
+        return (f"zoompan=z='1+0.22*on/{total}':"
+                f"x='(iw-iw/zoom)*0.4*on/{total}':"
+                f"y='(ih-ih/zoom)*0.4*on/{total}':{zp}")
     if name == "flash":
-        # Brief white pulse near mid-scene (~80ms)
-        c = hold / 2
-        return f"eq=brightness='if(between(t,{c:.3f},{c+0.08:.3f}),0.7,0)'"
+        # TWO bright white pulses per scene — first at 1/3, second at 2/3
+        c1 = hold / 3
+        c2 = 2 * hold / 3
+        return (f"eq=brightness='if(between(t,{c1:.3f},{c1+0.10:.3f})+"
+                f"between(t,{c2:.3f},{c2+0.10:.3f}),1.0,0)':eval=frame")
+    if name == "shake":
+        # Continuous gentle camera shake at 1.10× zoom (so we have crop room).
+        # Pixel offsets are smaller fraction of frame so it doesn't reveal edges.
+        return (f"zoompan=z='1.12':"
+                f"x='(iw-iw/zoom)/2 + {width//40}*sin(28*on/{FPS})':"
+                f"y='(ih-ih/zoom)/2 + {height//40}*sin(24*on/{FPS})':{zp}")
+    if name == "pulse":
+        # Brightness pulses — 3 throbs across the scene
+        return (f"eq=brightness='0.20*sin(2*PI*3*t/{hold:.3f})':"
+                f"contrast='1+0.08*sin(2*PI*3*t/{hold:.3f})':eval=frame")
+    if name == "punch":
+        # Sharp zoom-kick mid-scene (~150ms) — visual punch / drop.
+        mid_f = int((hold / 2) * FPS)
+        end_f = mid_f + int(0.15 * FPS)
+        return f"zoompan=z='if(between(on,{mid_f},{end_f}),1.55,1.0)':{zp}"
     return ""
 
 
