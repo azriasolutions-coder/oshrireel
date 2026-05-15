@@ -4,6 +4,11 @@ import random
 from pathlib import Path
 from typing import Iterable, Sequence
 
+try:
+    from PIL import Image  # type: ignore
+except Exception:  # pragma: no cover — Pillow is in requirements.txt
+    Image = None  # type: ignore
+
 WIDTH = 480
 HEIGHT = 848
 FPS = 25
@@ -11,6 +16,31 @@ SCENE_DURATION = 2.5
 TRANSITION_DURATION = 0.4
 BLUR_RADIUS = 25
 BACKDROP_DARKEN = -0.18
+
+# Source images larger than this on the longest side are resized in-place
+# before ffmpeg sees them. 2000 is just over Full HD (1920×1080) so output
+# quality is preserved, while caps peak ffmpeg RAM by ~5-8GB on huge
+# (4000×4000+) uploads.
+MAX_INPUT_DIM = 2000
+
+
+def preshrink_image(path: Path, max_dim: int = MAX_INPUT_DIM) -> None:
+    """Resize an image in place if longer side exceeds max_dim. No-op for
+    files that are already small enough, missing, or non-image."""
+    if Image is None:
+        return
+    try:
+        with Image.open(path) as im:
+            im.load()
+            if max(im.size) <= max_dim:
+                return
+            im.thumbnail((max_dim, max_dim), Image.LANCZOS)
+            try:
+                im.save(path, quality=92, optimize=True)
+            except Exception:
+                im.save(path)
+    except Exception:
+        pass  # silent — always fall back to the original on any error
 
 # Aspect-ratio presets. Each tuple is (width, height) in px.
 ASPECT_PRESETS: dict[str, tuple[int, int]] = {
@@ -414,6 +444,14 @@ def generate(
             raise FileNotFoundError(p)
     if xfade >= hold:
         xfade = max(0.1, hold / 4)
+
+    # Cap source image size to keep ffmpeg memory bounded on big uploads.
+    for p in image_list:
+        if not is_video(p) and p.suffix.lower() in IMAGE_EXTS:
+            preshrink_image(p)
+    if background is not None and Path(background).exists() and not is_video(Path(background)):
+        if Path(background).suffix.lower() in IMAGE_EXTS:
+            preshrink_image(Path(background))
 
     n = len(image_list)
     clip_flags = [is_video(p) for p in image_list]

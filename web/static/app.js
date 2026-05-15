@@ -484,8 +484,18 @@ generateBtn.addEventListener("click", async () => {
 
   try {
     const r = await fetch("/api/generate", { method: "POST", body: fd });
-    const data = await r.json();
-    if (!r.ok || !data.ok) throw new Error(data.error || "שגיאה");
+    let data = null;
+    const raw = await r.text();
+    try { data = JSON.parse(raw); } catch (_) {
+      throw new Error(
+        r.status === 502 || r.status === 504
+          ? `השרת קרס באמצע הייצור (HTTP ${r.status}). סיבה סבירה: התמונות גדולות מדי או יותר מדי תמונות בבת אחת. נסה עם פחות תמונות או תמונות קטנות יותר.`
+          : r.status === 413
+          ? "הקבצים גדולים מדי בסך הכל (הגבול 300MB). הקטן או חלק לכמה ריצות."
+          : `שגיאה ${r.status} מהשרת — ${raw.slice(0, 200)}`
+      );
+    }
+    if (!r.ok || !data.ok) throw new Error(data.error || `שגיאה ${r.status}`);
     const tsummary = (data.transitions && data.transitions.length)
       ? " · מעברים: " + data.transitions.map(transitionLabel).join(" → ")
       : "";
