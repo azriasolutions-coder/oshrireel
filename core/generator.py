@@ -130,19 +130,29 @@ NATIVE_XFADE_TRANSITIONS: tuple[str, ...] = (
 
 ALL_TRANSITIONS: tuple[str, ...] = NATIVE_XFADE_TRANSITIONS + (CUT_KEYWORD,)
 
-# Curated "auto mix" — diversified for WOW factor on portrait Reels content.
-# Heavy `fade` weight removed; more cinematic/dramatic transitions in rotation.
+# Curated "auto mix" — DRAMATIC by default.
+# Soft transitions (plain `fade`, `smooth*`) are intentionally excluded —
+# the user wants every cut to feel punchy and cinematic.
 AUTO_MIX_TRANSITIONS: tuple[str, ...] = (
+    # Snappy directional pushes
     "slideleft", "slideright", "slideup", "slidedown",
-    "smoothleft", "smoothright", "smoothup", "smoothdown",
+    # New layer slams over the old (heavier than slide)
     "coverleft", "coverright", "coverup", "coverdown",
+    # Geometric reveals
     "circleopen", "circleclose",
-    "radial", "zoomin",
-    "wipeleft", "wiperight",
-    "diagtl", "diagbr",
-    "revealleft", "revealright",
+    "radial",
+    # Cinematic zoom into the new scene
+    "zoomin",
+    # Hard wipes in all four directions
+    "wipeleft", "wiperight", "wipeup", "wipedown",
+    # Diagonal drama (all four corners)
+    "diagtl", "diagtr", "diagbl", "diagbr",
+    # Reveal (old layer peels back)
+    "revealleft", "revealright", "revealup", "revealdown",
+    # Stylized: blocky reveal
     "pixelize",
-    "fade",  # one fade in the pool for occasional breather
+    # Dramatic camera flashes
+    "fadewhite", "fadeblack",
 )
 
 
