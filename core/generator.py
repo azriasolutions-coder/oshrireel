@@ -70,8 +70,10 @@ AUDIO_EXTS = {".mp3", ".m4a", ".aac", ".wav", ".ogg"}
 SCENE_LOOKS: dict[str, str] = {
     "none": "",
     "cinematic": "eq=contrast=1.08:saturation=1.05:gamma=0.95,vignette=PI/5",
-    "warm": "eq=gamma_r=1.06:gamma_b=0.92:saturation=1.08:contrast=1.04,curves=preset=warmer",
-    "cool": "eq=gamma_r=0.94:gamma_b=1.06:saturation=0.95:contrast=1.03,curves=preset=cooler",
+    # `warmer`/`cooler` are NOT valid curves presets — use eq gamma channels
+    # for the colour-temperature shift instead (works on every ffmpeg build).
+    "warm": "eq=gamma_r=1.10:gamma_b=0.88:saturation=1.10:contrast=1.05",
+    "cool": "eq=gamma_r=0.90:gamma_b=1.10:saturation=0.95:contrast=1.04",
     "vintage": "curves=preset=vintage,vignette=PI/4,noise=alls=8:allf=t",
     "sepia": "colorchannelmixer=.393:.769:.189:0:.349:.686:.168:0:.272:.534:.131,eq=contrast=1.05",
     "vivid": "eq=saturation=1.35:contrast=1.08:gamma=0.97",
